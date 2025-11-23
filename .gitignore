@@ -1,0 +1,17 @@
+# Firebase related ignores
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.env
+.env.local
+.env.*.local
+firebase-tools.json
+
+# Node.js related ignores (common for web projects)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+/.firebase/
