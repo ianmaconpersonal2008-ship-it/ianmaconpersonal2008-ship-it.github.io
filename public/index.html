@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job & Inventory Manager</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb;
+        }
+        /* Specific height for the scrolling table area to fit screen */
+        .inventory-scroll-area {
+            height: calc(100vh - 380px); 
+            min-height: 400px;
+            overflow-y: auto;
+        }
+        .modal-background {
+            background-color: rgba(15, 23, 42, 0.9);
+        }
+        /* Tab Active State */
+        .tab-active {
+            border-bottom: 2px solid #2563eb;
+            color: #2563eb;
+            background-color: #eff6ff;
+        }
+        .tab-inactive {
+            border-bottom: 2px solid transparent;
+            color: #6b7280;
+        }
+        .tab-inactive:hover {
+            color: #374151;
+            border-bottom: 2px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 h-screen flex flex-col">
+    <!-- Login/Signup Screen -->
+    <div id="auth-screen" class="fixed inset-0 bg-gray-50 flex items-center justify-center z-50 p-4">
+        <div class="w-full max-w-md bg-white p-8 md:p-10 rounded-xl shadow-2xl border border-gray-100">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-extrabold text-gray-900 mb-1">Welcome to NorthState Fence Manager</h1>
+                <p class="text-gray-500">Sign in to manage your jobs and inventory.</p>
+            </div>
+
+            <!-- Sign in with Google Button -->
+            <button id="google-sign-in-btn" class="w-full flex items-center justify-center bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold py-3 rounded-lg transition duration-200 shadow-sm mb-4">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google icon" class="w-5 h-5 mr-3">
+                Sign In with Google
+            </button>
+            
+            <div class="relative flex items-center justify-center mb-6">
+                <div class="absolute inset-0 flex items-center">
+                    <div class="w-full border-t border-gray-300"></div>
+                </div>
+                <div class="relative z-10 bg-white px-4 text-sm text-gray-500">
+                    OR
+                </div>
+            </div>
+
+            <!-- Auth Form (Email/Password) -->
+            <form id="auth-form" class="space-y-6">
+                <input type="email" id="auth-email" placeholder="Email Address" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                <input type="password" id="auth-password" placeholder="Password (min 6 characters)" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500">
+                
+                <button type="submit" id="auth-submit-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition duration-200 shadow-md">
+                    Sign In
+                </button>
+                
+                <p id="auth-error-message" class="text-red-600 text-sm text-center font-medium hidden"></p>
+            </form>
+
+            <div class="mt-6 text-center">
+                <button id="toggle-auth-mode-btn" class="text-sm text-blue-600 hover:text-blue-800">
+                    Need an account? Switch to Sign Up
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-white bg-opacity-95 flex items-center justify-center z-40 hidden">
+        <div class="text-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div class="text-xl font-semibold text-blue-600" id="loading-text">Initializing Database...</div>
+            <div class="text-sm text-red-500 mt-2 hidden" id="loading-error"></div>
+        </div>
+    </div>
+
+    <!-- Main App Content -->
+    <div id="app" class="hidden max-w-7xl mx-auto w-full flex-col h-full">
+        <header class="flex-none mb-6 border-b pb-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between">
+                <div class="flex items-center mb-4 md:mb-0">
+                    <!-- Custom SVG Logo -->
+                    <div class="mr-4">
+                        <svg width="180" height="70" viewBox="0 0 300 125" xmlns="http://www.w3.org/2000/svg" class="rounded shadow-sm">
+                          <rect width="100%" height="100%" fill="#0f172a"/> <!-- Dark Background -->
+                          <!-- White Box -->
+                          <rect x="10" y="10" width="280" height="55" fill="white" rx="4" />
+                          <!-- NorthState Text -->
+                          <text x="150" y="52" font-family="sans-serif" font-size="42" font-weight="bold" fill="#0f172a" text-anchor="middle">NorthState</text>
+                          <!-- FENCE Text -->
+                          <text x="150" y="105" font-family="sans-serif" font-size="38" font-weight="normal" letter-spacing="8" fill="white" text-anchor="middle">FENCE</text>
+                        </svg>
+                    </div>
+                    <h1 class="text-3xl font-extrabold text-gray-900 hidden sm:block">Job & Inventory Manager</h1>
+                </div>
+                <div class="flex items-center gap-4">
+                    <p class="text-sm text-gray-500 bg-white px-3 py-1 rounded-full shadow-sm border">
+                        User ID: <span id="user-id" class="font-mono font-bold text-blue-600">...</span>
+                    </p>
+                    <button onclick="window.handleSignOut()" class="px-4 py-2 text-sm bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition">Sign Out</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Navigation Tabs -->
+        <div class="flex border-b border-gray-200 mb-6 flex-none">
+            <button onclick="switchMainTab('jobs')" id="tab-btn-jobs" class="tab-active flex-1 py-4 px-6 text-center font-bold text-lg rounded-t-lg transition duration-200">
+                Job Tracking
+            </button>
+            <button onclick="switchMainTab('inventory')" id="tab-btn-inventory" class="tab-inactive flex-1 py-4 px-6 text-center font-bold text-lg rounded-t-lg transition duration-200">
+                Master Inventory
+            </button>
+        </div>
+
+        <!-- JOBS TAB CONTENT -->
+        <div id="view-jobs" class="flex-grow flex flex-col">
+            <div class="bg-white shadow-xl rounded-xl p-6 border border-gray-100 flex-grow flex flex-col">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 flex-none">
+                    <h2 class="text-2xl font-bold text-gray-800">Active Jobs</h2>
+                    <button onclick="openJobModal()" class="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-6 rounded-lg shadow-md transition duration-200 flex items-center justify-center">
+                        <span class="text-xl mr-2">+</span> New Job / Contract
+                    </button>
+                </div>
+
+                <!-- Job Type Filters -->
+                <div id="job-type-tabs" class="flex border-b border-gray-200 mb-6 overflow-x-auto flex-none">
+                    <!-- Tabs injected here -->
+                </div>
+
+                <div id="jobs-list" class="space-y-4 overflow-y-auto flex-grow pr-2">
+                    <p class="text-gray-500 text-center py-8">Loading jobs...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- INVENTORY TAB CONTENT -->
+        <div id="view-inventory" class="hidden flex-grow flex flex-col">
+            <div class="bg-white shadow-xl rounded-xl p-6 border border-blue-100 flex-grow flex flex-col h-full">
+                
+                <!-- Top Controls: Add Item & Summary -->
+                <div class="flex-none grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                    <!-- Add Item Form -->
+                    <div class="lg:col-span-2 bg-gray-50 p-4 rounded-lg border border-gray-200">
+                        <h3 class="font-bold text-gray-700 mb-3">Add New Stock Item</h3>
+                        <form id="add-master-item-form" class="flex flex-col md:flex-row gap-3 items-end">
+                            <div class="flex-grow w-full">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Item Name</label>
+                                <input type="text" id="new-master-name" placeholder="e.g. 4' Post" class="w-full p-2 border rounded text-sm" required>
+                            </div>
+                            <div class="w-full md:w-40">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Category</label>
+                                <select id="new-master-category" class="w-full p-2 border rounded text-sm bg-white" required>
+                                    <!-- Options filled by JS -->
+                                </select>
+                            </div>
+                            <div class="w-full md:w-24">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Price ($)</label>
+                                <input type="number" id="new-master-price" placeholder="0.00" step="0.01" class="w-full p-2 border rounded text-sm" required>
+                            </div>
+                            <div class="w-full md:w-24">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Live Stock</label>
+                                <input type="number" id="new-master-stock" placeholder="0" class="w-full p-2 border rounded text-sm" required>
+                            </div>
+                            <button type="submit" class="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium hover:bg-blue-700 h-[38px] shadow-sm">Add</button>
+                        </form>
+                    </div>
+
+                    <!-- Summary Card -->
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 flex flex-col justify-center">
+                        <div class="text-sm text-blue-600 font-bold uppercase mb-1">Total Value (Sold Jobs)</div>
+                        <div id="total-sold-value" class="text-3xl font-extrabold text-gray-800">$0.00</div>
+                        <div class="text-xs text-blue-400 mt-1">Based on active sold contracts</div>
+                    </div>
+                </div>
+
+                <!-- Main Inventory Table -->
+                <div class="flex-grow border rounded-lg overflow-hidden flex flex-col">
+                    <div class="bg-gray-100 p-3 border-b font-bold text-gray-700 text-sm flex-none grid grid-cols-12 gap-2">
+                        <div class="col-span-2">Category</div>
+                        <div class="col-span-4">Item Name</div>
+                        <div class="col-span-2 text-right">Unit Price</div>
+                        <div class="col-span-2 text-right">Live Stock</div>
+                        <div class="col-span-2 text-center">Availability</div>
+                    </div>
+                    <div id="inventory-list-container" class="inventory-scroll-area bg-white divide-y divide-gray-200 text-sm">
+                        <!-- Inventory Rows injected here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job Modal -->
+    <div id="job-modal" class="fixed inset-0 modal-background z-50 hidden flex items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl p-6 md:p-8 my-8 relative">
+            <button onclick="closeJobModal()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+            
+            <h3 class="text-2xl font-bold text-gray-800 mb-6" id="job-modal-title">Create New Job</h3>
+            
+            <form id="job-form">
+                <!-- Top Row -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="col-span-1 md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                        <input type="text" id="customer-name" required class="w-full rounded-lg border-gray-300 border p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <!-- Date Field Removed -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                        <select id="job-status" required class="w-full rounded-lg border-gray-300 border p-2.5 bg-white">
+                            <option value="Quote">Quote (No Inventory Deduction)</option>
+                            <option value="Sold">Sold (Deducts Inventory)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Job Type Selector -->
+                <div class="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <label class="block text-sm font-bold text-blue-800 mb-2">Select Job Type (Filters Material List)</label>
+                    <select id="job-type" required class="w-full rounded-lg border-blue-300 border p-2.5 bg-white font-medium" onchange="renderMaterialsSection()">
+                        <!-- Filled by JS -->
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <!-- Left Column: Labor & Pricing -->
+                    <div>
+                        <h4 class="text-lg font-bold text-gray-800 mb-3 border-b pb-2">Labor & Markup</h4>
+                        <div class="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Linear Feet ($4/ft)</label>
+                                <input type="number" id="linear-feet" value="0" min="0" class="w-full p-2 border rounded border-gray-300" oninput="window.calculateLiveTotal()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Gates ($50/ea)</label>
+                                <input type="number" id="num-gates" value="0" min="0" class="w-full p-2 border rounded border-gray-300" oninput="window.calculateLiveTotal()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Material Markup %</label>
+                                <input type="number" id="material-markup" value="0" min="0" class="w-full p-2 border rounded border-gray-300" oninput="window.calculateLiveTotal()">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 uppercase">Labor Markup %</label>
+                                <input type="number" id="labor-markup" value="0" min="0" class="w-full p-2 border rounded border-gray-300" oninput="window.calculateLiveTotal()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Materials -->
+                    <div>
+                        <div class="flex justify-between items-center mb-3 border-b pb-2">
+                            <h4 class="text-lg font-bold text-gray-800">Materials List</h4>
+                            <button type="button" onclick="addMaterialRow()" class="text-sm text-blue-600 hover:text-blue-800 font-medium flex items-center">
+                                + Add Item
+                            </button>
+                        </div>
+                        <div id="materials-container" class="space-y-2 max-h-64 overflow-y-auto pr-2">
+                            <!-- Rows injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer -->
+                <div class="mt-8 pt-4 border-t flex justify-between items-center">
+                    <div class="text-xl font-bold text-gray-800">
+                        Estimated Total: <span id="live-job-total" class="text-blue-600">$0.00</span>
+                    </div>
+                    <div class="flex space-x-3">
+                        <button type="button" onclick="closeJobModal()" class="px-6 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50">Cancel</button>
+                        <button type="submit" class="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg">Save Job</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { 
+            getAuth, 
+            onAuthStateChanged, 
+            signOut,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            // New imports for Google Sign-in
+            GoogleAuthProvider,
+            signInWithPopup
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, updateDoc, deleteDoc, runTransaction, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // 1. Config: This configuration connects to YOUR Firebase Project.
+        const appId = 'northstate-fence-app'; // Custom unique ID for collection paths
+        const firebaseConfig = {
+            apiKey: "AIzaSyAGAgL9XeYjCraxC2zOnDAYhbBWHHhlcj8",
+            authDomain: "northstate-fence-app.firebaseapp.com",
+            projectId: "northstate-fence-app",
+            storageBucket: "northstate-fence-app.firebasestorage.app",
+            messagingSenderId: "34537115080",
+            appId: "1:34537115080:web:654514cb67577a7af5c4fd",
+            measurementId: "G-G7641FPSDH"
+        };
+        
+        // 2. State
+        let db, auth, userId;
+        let inventoryMaster = {};
+        let allJobs = [];
+        const JOB_TYPES = ["4ft Aluminum", "5ft Aluminum", "Vinyl Privacy"];
+        const SHARED_CATEGORY = "Shared / Hardware"; 
+        let activeJobType = JOB_TYPES[0];
+        let authMode = 'login'; // 'login' or 'signup'
+
+        // 3. Constants
+        const LABOR_RATE_PER_FOOT = 4.00;
+        const LABOR_RATE_PER_GATE = 50.00;
+        
+        const errorMessageDiv = document.getElementById('auth-error-message');
+        const authScreen = document.getElementById('auth-screen');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const mainApp = document.getElementById('app');
+
+        // 4. Initialization
+        async function initApp() {
+            try {
+                // setLogLevel('debug'); // Uncomment this line to see detailed Firebase logs in console
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Start the auth listener
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        // User is signed in
+                        userId = user.uid;
+                        document.getElementById('user-id').textContent = userId;
+                        
+                        // Hide Auth Screen, Show Main App
+                        authScreen.classList.add('hidden');
+                        loadingOverlay.classList.add('hidden');
+                        mainApp.classList.remove('hidden');
+                        mainApp.classList.add('flex');
+                        
+                        setupListeners();
+                        await initializeData();
+                        renderJobTabs();
+                        populateJobTypeSelect();
+                        populateMasterCategorySelect();
+                        
+                    } else {
+                        // No user is signed in. Show Auth Screen.
+                        loadingOverlay.classList.add('hidden');
+                        mainApp.classList.add('hidden');
+                        mainApp.classList.remove('flex');
+                        authScreen.classList.remove('hidden');
+                    }
+                });
+
+            } catch (e) {
+                console.error("Init failed:", e);
+                loadingOverlay.classList.remove('hidden');
+                document.getElementById('loading-text').textContent = "Error Initializing App";
+                document.getElementById('loading-error').textContent = e.message;
+                document.getElementById('loading-error').classList.remove('hidden');
+            }
+        }
+
+        function setupListeners() {
+            // Firestore data is still public, so all authenticated users see the same data
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/inventory_v4`), (snapshot) => {
+                inventoryMaster = {};
+                snapshot.forEach(doc => inventoryMaster[doc.id] = doc.data());
+                renderInventoryView();
+            });
+
+            onSnapshot(collection(db, `artifacts/${appId}/public/data/jobs_v4`), (snapshot) => {
+                allJobs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderJobsList();
+                renderInventoryView();
+            });
+        }
+
+        // 5. Authentication Handlers
+        window.handleSignOut = async () => {
+            try {
+                await signOut(auth);
+                // The onAuthStateChanged listener will automatically switch to the Auth Screen
+            } catch (error) {
+                console.error("Error signing out:", error);
+            }
+        }
+
+        function displayAuthError(message) {
+            errorMessageDiv.textContent = message;
+            errorMessageDiv.classList.remove('hidden');
+            setTimeout(() => errorMessageDiv.classList.add('hidden'), 5000);
+        }
+
+        // Handler for Google Sign-in
+        document.getElementById('google-sign-in-btn').addEventListener('click', async () => {
+            const provider = new GoogleAuthProvider();
+            try {
+                // Attempt to sign in with a pop-up window
+                await signInWithPopup(auth, provider);
+                // Auth listener handles the UI transition on success
+            } catch (error) {
+                let msg = 'Error signing in with Google.';
+                if (error.code === 'auth/popup-closed-by-user') {
+                    msg = 'Sign-in window closed. Please try again.';
+                } else if (error.code === 'auth/cancelled-popup-request') {
+                    msg = 'Another sign-in request is already in progress.';
+                } else {
+                    msg = error.message;
+                }
+                displayAuthError(msg);
+                console.error("Google Auth Error:", error);
+            }
+        });
+
+        // Handle form submission for email/password login/signup
+        document.getElementById('auth-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const submitBtn = document.getElementById('auth-submit-btn');
+
+            submitBtn.textContent = authMode === 'login' ? 'Signing In...' : 'Signing Up...';
+            submitBtn.disabled = true;
+            errorMessageDiv.classList.add('hidden');
+
+            try {
+                if (authMode === 'login') {
+                    await signInWithEmailAndPassword(auth, email, password);
+                } else {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                }
+                // Auth listener handles the UI transition on success
+
+            } catch (error) {
+                let msg = 'An unknown error occurred.';
+                if (error.code) {
+                    // Firebase specific errors
+                    switch (error.code) {
+                        case 'auth/invalid-email': msg = 'Invalid email address format.'; break;
+                        case 'auth/user-disabled': msg = 'This user account has been disabled.'; break;
+                        case 'auth/user-not-found': msg = 'No user found with this email.'; break;
+                        case 'auth/wrong-password': msg = 'Incorrect password.'; break;
+                        case 'auth/email-already-in-use': msg = 'This email is already registered.'; break;
+                        case 'auth/weak-password': msg = 'Password should be at least 6 characters.'; break;
+                        case 'auth/operation-not-allowed': msg = 'Email/Password sign-in is not enabled in Firebase project settings.'; break;
+                        default: msg = error.message;
+                    }
+                }
+                displayAuthError(msg);
+                console.error("Auth Error:", error);
+            } finally {
+                submitBtn.textContent = authMode === 'login' ? 'Sign In' : 'Sign Up';
+                submitBtn.disabled = false;
+            }
+        });
+
+        // Toggle between email/password login and signup modes
+        document.getElementById('toggle-auth-mode-btn').addEventListener('click', () => {
+            authMode = authMode === 'login' ? 'signup' : 'login';
+            document.getElementById('auth-submit-btn').textContent = authMode === 'login' ? 'Sign In' : 'Sign Up';
+            document.getElementById('toggle-auth-mode-btn').textContent = authMode === 'login' ? 'Need an account? Switch to Sign Up' : 'Already have an account? Switch to Sign In';
+            document.getElementById('auth-email').value = '';
+            document.getElementById('auth-password').value = '';
+            errorMessageDiv.classList.add('hidden');
+        });
+
+        // 6. Logic (Remains the same)
+        function calculateJobValue(job) {
+            const materialCost = job.materials.reduce((sum, m) => sum + (m.unitPrice * m.quantity), 0);
+            const laborCost = (parseInt(job.linearFeet||0) * LABOR_RATE_PER_FOOT) + (parseInt(job.numGates||0) * LABOR_RATE_PER_GATE);
+            
+            const matTotal = materialCost * (1 + (parseInt(job.materialMarkup||0)/100));
+            const laborTotal = laborCost * (1 + (parseInt(job.laborMarkup||0)/100));
+            
+            return matTotal + laborTotal;
+        }
+
+        function calculateInventoryState() {
+            const state = JSON.parse(JSON.stringify(inventoryMaster)); 
+            let totalValue = 0;
+
+            Object.keys(state).forEach(k => state[k].availableStock = state[k].liveStock);
+
+            allJobs.filter(j => j.status === 'Sold').forEach(job => {
+                totalValue += calculateJobValue(job);
+                job.materials.forEach(mat => {
+                    if (state[mat.materialName]) {
+                        state[mat.materialName].availableStock -= mat.quantity;
+                    }
+                });
+            });
+
+            return { state, totalValue };
+        }
+
+        // 7. Main Tab Switching (Remains the same)
+        window.switchMainTab = (tab) => {
+            const jobsView = document.getElementById('view-jobs');
+            const invView = document.getElementById('view-inventory');
+            const jobsBtn = document.getElementById('tab-btn-jobs');
+            const invBtn = document.getElementById('tab-btn-inventory');
+
+            if (tab === 'jobs') {
+                jobsView.classList.remove('hidden');
+                invView.classList.add('hidden');
+                jobsBtn.classList.add('tab-active');
+                jobsBtn.classList.remove('tab-inactive');
+                invBtn.classList.add('tab-inactive');
+                invBtn.classList.remove('tab-active');
+            } else {
+                jobsView.classList.add('hidden');
+                invView.classList.remove('hidden');
+                invBtn.classList.add('tab-active');
+                invBtn.classList.remove('tab-inactive');
+                jobsBtn.classList.add('tab-inactive');
+                jobsBtn.classList.remove('tab-active');
+            }
+        };
+
+        // 8. Rendering Inventory (Remains the same)
+        function renderInventoryView() {
+            const { state, totalValue } = calculateInventoryState();
+            document.getElementById('total-sold-value').textContent = '$' + totalValue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+            const container = document.getElementById('inventory-list-container');
+            container.innerHTML = '';
+            
+            Object.keys(state).sort((a, b) => {
+                const catA = state[a].category || "";
+                const catB = state[b].category || "";
+                if (catA !== catB) return catA.localeCompare(catB);
+                return a.localeCompare(b);
+            }).forEach(name => {
+                const item = state[name];
+                const stockClass = item.availableStock < 0 ? 'text-red-600 font-bold' : (item.availableStock < 10 ? 'text-orange-500 font-medium' : 'text-green-600 font-medium');
+                const categoryLabel = item.category === SHARED_CATEGORY ? 'Shared / Hardware' : (item.category || 'Uncategorized');
+                const catClass = item.category === SHARED_CATEGORY ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600';
+
+                const row = document.createElement('div');
+                row.className = "grid grid-cols-12 gap-2 p-3 items-center hover:bg-gray-50 border-b last:border-b-0 transition-colors duration-150";
+                row.innerHTML = `
+                    <div class="col-span-2">
+                        <span class="text-[10px] uppercase font-bold px-2 py-1 rounded-full ${catClass}">${categoryLabel}</span>
+                    </div>
+                    <div class="col-span-4 font-medium text-gray-800">${name}</div>
+                    <div class="col-span-2 text-right">
+                        <input type="number" step="0.01" value="${item.unitPrice}" class="w-full p-1 border border-gray-200 rounded text-right text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onchange="window.updateMasterItem('${name}', 'unitPrice', this.value)">
+                    </div>
+                    <div class="col-span-2 text-right">
+                        <input type="number" value="${item.liveStock}" class="w-full p-1 border border-gray-200 rounded text-right text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                        onchange="window.updateMasterItem('${name}', 'liveStock', this.value)">
+                    </div>
+                    <div class="col-span-2 flex justify-between items-center pl-4">
+                        <span class="${stockClass} text-base">${item.availableStock}</span>
+                        <button onclick="window.deleteMasterItem('${name}')" class="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition" title="Delete Item">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        // 9. Rendering Jobs (Remains the same)
+        function renderJobsList() {
+            const container = document.getElementById('jobs-list');
+            container.innerHTML = '';
+            const filtered = allJobs.filter(j => j.jobType === activeJobType).sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center text-gray-500 py-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">No ${activeJobType} jobs found.</div>`;
+                return;
+            }
+
+            filtered.forEach(job => {
+                const val = calculateJobValue(job);
+                const badgeClass = job.status === 'Sold' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                const div = document.createElement('div');
+                div.className = "bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition flex justify-between items-center";
+                div.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-lg text-gray-800">${job.customerName}</span>
+                            <span class="px-2 py-0.5 rounded text-xs font-bold ${badgeClass}">${job.status}</span>
+                        </div>
+                        <div class="text-sm text-gray-500 mt-1">
+                            ${job.date} • Total: <span class="font-bold text-gray-700">$${val.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-2 max-w-md truncate">
+                            ${job.materials.map(m => `${m.quantity}x ${m.materialName}`).join(', ')}
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button class="p-2 text-blue-600 hover:bg-blue-50 rounded edit-btn"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg></button>
+                        <button class="p-2 text-red-600 hover:bg-red-50 rounded delete-btn"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                    </div>
+                `;
+                div.querySelector('.edit-btn').onclick = () => window.openJobModal(job.id);
+                div.querySelector('.delete-btn').onclick = () => window.deleteJob(job.id);
+                container.appendChild(div);
+            });
+        }
+
+        function renderJobTabs() {
+            const container = document.getElementById('job-type-tabs');
+            container.innerHTML = JOB_TYPES.map(type => `
+                <button onclick="window.switchJobType('${type}')" 
+                    class="px-4 py-2 mr-2 whitespace-nowrap text-sm font-medium rounded-t-lg border-b-2 transition ${type === activeJobType ? 'border-blue-600 text-blue-600 bg-blue-50' : 'border-transparent text-gray-500 hover:text-gray-700'}">
+                    ${type}
+                </button>
+            `).join('');
+        }
+
+        // 10. Helper Functions (Remains the same)
+        window.populateJobTypeSelect = () => {
+            document.getElementById('job-type').innerHTML = JOB_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+
+        window.populateMasterCategorySelect = () => {
+            const options = [...JOB_TYPES, SHARED_CATEGORY];
+            document.getElementById('new-master-category').innerHTML = options.map(t => `<option value="${t}">${t}</option>`).join('');
+        }
+
+        window.renderMaterialsSection = (existing = []) => {
+            const container = document.getElementById('materials-container');
+            container.innerHTML = '';
+            if (existing.length > 0) {
+                existing.forEach(m => window.addMaterialRow(m.materialName, m.quantity, m.unitPrice));
+            } else {
+                window.addMaterialRow();
+            }
+            window.calculateLiveTotal();
+        };
+
+        window.addMaterialRow = (name='', qty='', price='') => {
+            const selectedJobType = document.getElementById('job-type').value;
+            const options = Object.keys(inventoryMaster)
+                .filter(k => {
+                    const itemCat = inventoryMaster[k].category;
+                    return itemCat === selectedJobType || itemCat === SHARED_CATEGORY || k === name;
+                })
+                .sort()
+                .map(k => `<option value="${k}" ${k === name ? 'selected' : ''}>${k}</option>`)
+                .join('');
+
+            const div = document.createElement('div');
+            div.className = "grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded border border-gray-200";
+            div.innerHTML = `
+                <div class="col-span-6">
+                    <select class="mat-name w-full p-1.5 text-sm border rounded bg-white" onchange="window.autoFillPrice(this)">
+                        <option value="">Select Item...</option>${options}
+                    </select>
+                </div>
+                <div class="col-span-2"><input type="number" placeholder="Qty" value="${qty}" class="mat-qty w-full p-1.5 text-sm border rounded text-right" oninput="window.calculateLiveTotal()"></div>
+                <div class="col-span-3"><input type="number" placeholder="$" step="0.01" value="${price}" class="mat-price w-full p-1.5 text-sm border rounded text-right text-gray-500" oninput="window.calculateLiveTotal()"></div>
+                <div class="col-span-1 text-center"><button type="button" onclick="this.parentElement.parentElement.remove(); window.calculateLiveTotal()" class="text-red-500 hover:text-red-700">&times;</button></div>
+            `;
+            document.getElementById('materials-container').appendChild(div);
+            if(name && !price) window.autoFillPrice(div.querySelector('.mat-name'));
+        };
+
+        window.autoFillPrice = (select) => {
+            const name = select.value;
+            if (inventoryMaster[name]) {
+                select.closest('.grid').querySelector('.mat-price').value = inventoryMaster[name].unitPrice;
+                window.calculateLiveTotal();
+            }
+        };
+
+        window.calculateLiveTotal = () => {
+            let materialCost = 0;
+            document.querySelectorAll('#materials-container .grid').forEach(row => {
+                materialCost += (parseFloat(row.querySelector('.mat-qty').value)||0) * (parseFloat(row.querySelector('.mat-price').value)||0);
+            });
+            const lf = parseFloat(document.getElementById('linear-feet').value) || 0;
+            const gates = parseFloat(document.getElementById('num-gates').value) || 0;
+            const matMarkup = parseFloat(document.getElementById('material-markup').value) || 0;
+            const laborMarkup = parseFloat(document.getElementById('labor-markup').value) || 0;
+            
+            const total = (materialCost * (1 + matMarkup/100)) + (((lf * LABOR_RATE_PER_FOOT) + (gates * LABOR_RATE_PER_GATE)) * (1 + laborMarkup/100));
+            document.getElementById('live-job-total').textContent = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        };
+
+        // 11. Actions (Remains the same)
+        window.openJobModal = (id = null) => {
+            const form = document.getElementById('job-form');
+            form.reset();
+            form.dataset.id = id || '';
+            document.getElementById('job-modal-title').textContent = id ? 'Edit Job' : 'Create New Job';
+            document.getElementById('job-modal').classList.remove('hidden');
+
+            if (id) {
+                const job = allJobs.find(j => j.id === id);
+                if (job) {
+                    document.getElementById('customer-name').value = job.customerName;
+                    document.getElementById('job-status').value = job.status;
+                    document.getElementById('job-type').value = job.jobType;
+                    document.getElementById('linear-feet').value = job.linearFeet || 0;
+                    document.getElementById('num-gates').value = job.numGates || 0;
+                    document.getElementById('material-markup').value = job.materialMarkup || 0;
+                    document.getElementById('labor-markup').value = job.laborMarkup || 0;
+                    window.renderMaterialsSection(job.materials);
+                }
+            } else {
+                document.getElementById('job-type').value = activeJobType;
+                window.renderMaterialsSection();
+            }
+            window.calculateLiveTotal();
+        };
+
+        window.closeJobModal = () => document.getElementById('job-modal').classList.add('hidden');
+        window.switchJobType = (type) => { activeJobType = type; renderJobTabs(); renderJobsList(); };
+        window.deleteJob = async (id) => { 
+            if(confirm("Are you sure you want to delete this job?")) {
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/jobs_v4`, id)); 
+            }
+        };
+
+        document.getElementById('add-master-item-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('new-master-name').value;
+            await setDoc(doc(db, `artifacts/${appId}/public/data/inventory_v4`, name), {
+                materialName: name, 
+                category: document.getElementById('new-master-category').value, 
+                unitPrice: parseFloat(document.getElementById('new-master-price').value), 
+                liveStock: parseInt(document.getElementById('new-master-stock').value)
+            });
+            e.target.reset();
+        });
+
+        window.updateMasterItem = async (name, field, val) => await updateDoc(doc(db, `artifacts/${appId}/public/data/inventory_v4`, name), { [field]: parseFloat(val) });
+        window.deleteMasterItem = async (name) => { 
+            if(confirm("Are you sure you want to remove this item from your master inventory?")) {
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/inventory_v4`, name)); 
+            }
+        };
+
+        document.getElementById('job-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = e.target.dataset.id;
+            let jobDate = new Date().toISOString().split('T')[0];
+            if (id) { const existing = allJobs.find(j => j.id === id); if (existing) jobDate = existing.date; }
+
+            const data = {
+                customerName: document.getElementById('customer-name').value,
+                date: jobDate,
+                status: document.getElementById('job-status').value,
+                jobType: document.getElementById('job-type').value,
+                linearFeet: document.getElementById('linear-feet').value,
+                numGates: document.getElementById('num-gates').value,
+                materialMarkup: document.getElementById('material-markup').value,
+                laborMarkup: document.getElementById('labor-markup').value,
+                materials: Array.from(document.querySelectorAll('#materials-container .grid')).map(row => ({
+                    materialName: row.querySelector('.mat-name').value,
+                    quantity: parseInt(row.querySelector('.mat-qty').value || 0),
+                    unitPrice: parseFloat(row.querySelector('.mat-price').value || 0)
+                })).filter(m => m.materialName && m.quantity > 0)
+            };
+
+            const coll = collection(db, `artifacts/${appId}/public/data/jobs_v4`);
+            if (id) await updateDoc(doc(coll, id), data); else await addDoc(coll, data);
+            window.closeJobModal();
+        });
+
+        async function initializeData() {
+            const ref = doc(db, `artifacts/${appId}/public/data/inventory_v4`, "Line Posts");
+            try {
+                const snap = await runTransaction(db, async (t) => await t.get(ref));
+                if (!snap.exists()) {
+                    const items = [
+                        {n:"4ft tall 6ft wide Sections", cat:"4ft Aluminum", p:52.43, s:100}, 
+                        {n:"Line Posts", cat:SHARED_CATEGORY, p:14.76, s:150},
+                        {n:"End Post", cat:SHARED_CATEGORY, p:14.76, s:50}, 
+                        {n:"Corner Post", cat:SHARED_CATEGORY, p:14.76, s:50},
+                        {n:"Gate End Post", cat:SHARED_CATEGORY, p:28.09, s:30}, 
+                        {n:"4ft tall 4ft Wide Flat Top Gate", cat:"4ft Aluminum", p:136.26, s:10},
+                        {n:"4ft tall 5ft Wide Flat Top Gate", cat:"4ft Aluminum", p:185.61, s:10}, 
+                        {n:"Self Closing Hinges", cat:SHARED_CATEGORY, p:37.00, s:100},
+                        {n:"Gravity Latches", cat:SHARED_CATEGORY, p:12.00, s:100}, 
+                        {n:"Magna Latches", cat:SHARED_CATEGORY, p:101.00, s:20},
+                        {n:"Drop Rods", cat:SHARED_CATEGORY, p:14.56, s:50}, 
+                        {n:"Graded Gate Charge", cat:SHARED_CATEGORY, p:100.00, s:999},
+                        {n:"5' Aluminum Sections", cat:"5ft Aluminum", p:45.99, s:50}, 
+                        {n:"Vinyl Privacy Sections (6ft)", cat:"Vinyl Privacy", p:75.00, s:40}
+                    ];
+                    for(const i of items) await setDoc(doc(db, `artifacts/${appId}/public/data/inventory_v4`, i.n), { materialName: i.n, category: i.cat, unitPrice: i.p, liveStock: i.s });
+                }
+            } catch (error) {
+                console.error("Error during initial data check:", error);
+            }
+        }
+        
+        // Final call to start the application flow
+        initApp();
+    </script>
+</body>
+</html>
